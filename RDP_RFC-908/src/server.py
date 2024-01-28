@@ -29,5 +29,6 @@ def run_server(local_port):
             # Check if there is data to send back
             if response and response.data:
                 server_connection.send(response.data)
+        
 
 run_server(12345)  # Run the server on port 12345

@@ -66,6 +66,16 @@ class RDPPacket:
         # Compute checksum and ensure it's the correct type
         checksum = self.compute_checksum()
 
+        # debug print for all packet header values before packing (port, seq_num, ack_num, data_length, checksum)
+        print(f"source_port: {self.source_port}, type: {type(self.source_port)}")
+        print(f"dest_port: {self.dest_port}, type: {type(self.dest_port)}")
+        print(f"data length: {len(self.data)}, type: {type(len(self.data))}")
+        print(f"seq_num: {self.seq_num}, type: {type(self.seq_num)}")
+        print(f"ack_num: {self.ack_num}, type: {type(self.ack_num)}")
+        print(f"checksum: {checksum}, type: {type(checksum)}")
+        
+
+
         # Pack the header
         header = struct.pack("!HHHIIII", control_and_version, self.source_port, self.dest_port, len(self.data), self.seq_num, self.ack_num, checksum)
 
@@ -75,20 +85,27 @@ class RDPPacket:
     @staticmethod
     def decode(packet_bytes):
         """
-        Decode the packet from bytes
-        :param packet_bytes: Bytes to decode
-        details: https://tools.ietf.org/html/rfc908
-        :return: Decoded packet
-
+        Decode the packet from bytes.
+        :param packet_bytes: Bytes to decode.
+        :return: Decoded RDPPacket object.
         """
+        # Unpack the first 22 bytes for the header
         control_and_version, source_port, dest_port, data_length, seq_num, ack_num, checksum = struct.unpack("!HHHIIII", packet_bytes[:22])
-        flags = control_and_version >> 16
-        syn = flags & 0x80
-        ack = flags & 0x40
-        eack = flags & 0x20
-        rst = flags & 0x10
-        nul = flags & 0x08
+
+        # Extract the last 8 bits which contain the flags
+        flags = control_and_version & 0xFF
+
+        # Extract individual flags
+        syn = (flags >> 3) & 1  # Extract the SYN flag (4th bit from the right)
+        ack = (flags >> 2) & 1  # Extract the ACK flag (3rd bit from the right)
+        eack = (flags >> 1) & 1  # Extract the EACK flag (2nd bit from the right)
+        rst = flags & 1         # Extract the RST flag (1st bit from the right)
+        nul = (flags >> 4) & 1  # Extract the NUL flag (5th bit from the right)
+
+        # Extract the data
         data = packet_bytes[22:]
+
+        # Return the decoded RDPPacket
         return RDPPacket(source_port, dest_port, seq_num, ack_num, data, syn, ack, eack, rst, nul)
     
     def compute_checksum(self):

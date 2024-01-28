@@ -3,6 +3,11 @@ from rdp_protocol import RDPPacket
 import socket
 
 class RDPConnection:
+    """
+    The RDPConnection class can be used to establish, maintain, and close network connections following the Reliable Data Protocol (RDP). 
+    It provides methods to send and receive data, handle various types of packets, and manage the state of the connection. 
+    The class can be used to create both server-side and client-side connections.
+    """
 
     def __init__(self, socket, remote_address, source_port, dest_port):
         """
@@ -56,8 +61,10 @@ class RDPConnection:
             if local_port is None:
                 return "Error - local port not specified"
             self.state = 'LISTEN'
+            self.handle_state_transition(self.state, 'START_LISTEN')
             # Additional setup for passive open...
         else:
+            print("Active open HERE dubg")
             if remote_port is None:
                 return "Error - remote port not specified"
             if local_port is None:
@@ -65,7 +72,9 @@ class RDPConnection:
             self.state = 'SYN-SENT'
             # Send SYN packet with SND.ISS, SND.MAX, RMAX.BUF
             syn_packet = RDPPacket(self.source_port, remote_port, self.SND_ISS, 0, syn=True)
+            print(f"Sending SYN packet: {syn_packet}")
             self.send_packet(syn_packet)
+            self.handle_state_transition(self.state, 'SEND_SYN')  # Transition state after sending SYN
 
         return f"Connection opened in state {self.state}"
 
@@ -80,6 +89,7 @@ class RDPConnection:
         if self.state in ['LISTEN', 'SYN-RCVD', 'SYN-SENT']:
             self.send_rst()
             self.state = 'CLOSED'
+            self.handle_state_transition(self.state, 'INITIATE_CLOSE')
             # Additional cleanup...
             return "Connection closed from state: LISTEN/SYN-RCVD/SYN-SENT"
 
@@ -113,6 +123,7 @@ class RDPConnection:
         # Prepare and send the data packet
         packet = self.prepare_data_packet(data)
         self.send_packet(packet)
+        self.handle_state_transition(self.state, 'DATA_SENT')
 
         # Update SND.NXT
         self.SND_NXT += len(data)
@@ -123,18 +134,24 @@ class RDPConnection:
             packet (RDPPacket): The packet to be sent.
         """
         encoded_packet = packet.encode()
+        print(f"Sending packet: {packet}")
         self.socket.sendto(encoded_packet, self.remote_address)
 
     def receive_packet(self):
-        """ 
-        Receives a packet. 
-        Returns:
-            RDPPacket: The received packet.
         """
-        packet_bytes, addr = self.socket.recvfrom(1024)
-        if addr != self.remote_address:
-            return None  # Ignore packets from unexpected sources
-        return RDPPacket.decode(packet_bytes)
+        Receives a packet.
+        Returns:
+            bytes: The received packet in byte format.
+        """
+        print("Waiting for packet...")
+        self.socket.settimeout(5.0)  # Set timeout to 5 seconds
+        try:
+            packet_bytes, addr = self.socket.recvfrom(1024)
+            self.remote_address = addr  # Save the client's address
+            return packet_bytes
+        except socket.timeout:
+            print("Timeout: No data received")
+            return None
 
     def send_ack(self, remote_port):
         """
@@ -201,6 +218,7 @@ class RDPConnection:
         if self.data_buffer:
             data = self.data_buffer
             self.data_buffer = b''  # Clear the buffer after reading
+            self.handle_state_transition(self.state, 'DATA_RECEIVED')  # Transition state after receiving data
             return data
         else:
             return "No new data received"
@@ -218,32 +236,43 @@ class RDPConnection:
 
         #debug print
         print(f"Processing packet: {packet}")
-        # Decode the packet
-        decoded_packet = packet.decode()
+
+        # ensure that packet is packet and not string literal error message
+        if type(packet) == str:
+            return packet
+        
+        # decode packet
+        print(f"Received packet: {packet}")
+        decoded_packet = RDPPacket.decode(packet)
+        print(f"Decoded packet: {decoded_packet}")
 
         # Handle packets based on the current state
         if self.state == 'LISTEN':
             if decoded_packet.syn and not decoded_packet.ack:
                 # Process SYN packet
                 self.handle_syn_packet(decoded_packet)
+                self.handle_state_transition('LISTEN', 'RECEIVE_SYN')
             # Handle other packet types if needed
 
         elif self.state == 'SYN-SENT':
             if decoded_packet.syn and decoded_packet.ack:
                 # Process SYN-ACK packet
                 self.handle_syn_ack_packet(decoded_packet)
+                self.handle_state_transition('SYN-SENT', 'RECEIVE_SYN_ACK')
             # Handle other packet types if needed
 
         elif self.state == 'SYN-RCVD':
             if decoded_packet.ack:
                 # Process ACK packet
                 self.handle_ack_packet(decoded_packet)
+                self.handle_state_transition('SYN-RCVD', 'RECEIVE_ACK')
             # Handle other packet types if needed
 
         elif self.state == 'OPEN':
             if decoded_packet.data:
                 # Process DATA packet
                 self.handle_data_packet(decoded_packet)
+
             elif decoded_packet.rst:
                 # Process RST packet
                 self.handle_rst_packet(decoded_packet)
@@ -261,6 +290,7 @@ class RDPConnection:
         if self.state == 'LISTEN' and packet.syn:
             self.RCV_CUR = packet.seq_num
             self.send_syn_ack(packet.source_port)  # Assuming this method sends a SYN-ACK response
+            print("Sending SYN-ACK")
             self.state = 'SYN-RCVD'
 
     def handle_syn_ack_packet(self, packet):
@@ -273,6 +303,7 @@ class RDPConnection:
         if self.state == 'SYN-SENT' and packet.syn and packet.ack:
             self.RCV_CUR = packet.seq_num
             self.send_ack(packet.source_port)  # Send ACK to complete three-way handshake
+            print("Sending ACK")
             self.state = 'OPEN'
 
     def handle_ack_packet(self, packet):
@@ -283,6 +314,7 @@ class RDPConnection:
         """
         # For SYN-RCVD state receiving ACK
         if self.state == 'SYN-RCVD' and packet.ack:
+            print("Received ACK")
             self.state = 'OPEN'
 
     def handle_data_packet(self, packet):
@@ -339,6 +371,8 @@ class RDPConnection:
             current_state (str): The current state of the connection.
             event (str): The event that triggered the transition.
         """
+
+        print(f"Transitioning from {current_state} due to {event}")
         if current_state == 'LISTEN':
             if event == 'RECEIVE_SYN':
                 # Process SYN packet and send SYN-ACK

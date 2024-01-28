@@ -23,13 +23,14 @@ def run_client(server_ip, server_port):
 
     # Wait for the connection to be established (state to be "OPEN")
     while client_connection.state != 'OPEN':
-        # Optionally, add a sleep interval to avoid a busy wait
+        #  add a sleep interval to avoid a busy wait
         time.sleep(0.1)
 
         # Check for incoming packets (like SYN-ACK) and process them
         packet = client_connection.receive_packet()
         if packet:
             client_connection.process_packet(packet)
+        
 
     # Send data to the server after the connection is established
     data_to_send = b"Hello, server!"
