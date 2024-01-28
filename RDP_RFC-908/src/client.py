@@ -33,9 +33,10 @@ def run_client(server_ip, server_port):
         
 
     # Send data to the server after the connection is established
-    data_to_send = b"Hello, server!"
-    print(f"Sending data: {data_to_send}")
-    client_connection.send(data_to_send)
+    if client_connection.state == 'OPEN':
+        data = "Hello, server!"
+        print(f"Sending data: {data}")
+        client_connection.send(data.encode())
 
     # Wait for a response
     response = client_connection.receive()
@@ -43,6 +44,6 @@ def run_client(server_ip, server_port):
         print(f"Received response: {response}")
 
     # Close the connection
-    print(client_connection.close())
+    client_connection.close()
 
 run_client("127.0.0.1", 12345)  # Connect to server at 127.0.0.1 on port 12345

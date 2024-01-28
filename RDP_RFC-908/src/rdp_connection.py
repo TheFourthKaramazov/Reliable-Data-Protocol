@@ -64,7 +64,6 @@ class RDPConnection:
             self.handle_state_transition(self.state, 'START_LISTEN')
             # Additional setup for passive open...
         else:
-            print("Active open HERE dubg")
             if remote_port is None:
                 return "Error - remote port not specified"
             if local_port is None:
@@ -288,9 +287,9 @@ class RDPConnection:
         """
         # This is a basic logic example, it should be expanded as per protocol requirements
         if self.state == 'LISTEN' and packet.syn:
+            print("Received SYN, sending SYN-ACK")
             self.RCV_CUR = packet.seq_num
             self.send_syn_ack(packet.source_port)  # Assuming this method sends a SYN-ACK response
-            print("Sending SYN-ACK")
             self.state = 'SYN-RCVD'
 
     def handle_syn_ack_packet(self, packet):
@@ -301,9 +300,9 @@ class RDPConnection:
         """
         # For SYN-SENT state receiving SYN-ACK
         if self.state == 'SYN-SENT' and packet.syn and packet.ack:
+            print("Received SYN-ACK, sending ACK")
             self.RCV_CUR = packet.seq_num
             self.send_ack(packet.source_port)  # Send ACK to complete three-way handshake
-            print("Sending ACK")
             self.state = 'OPEN'
 
     def handle_ack_packet(self, packet):
@@ -313,8 +312,8 @@ class RDPConnection:
             packet (RDPPacket): The received ACK packet.
         """
         # For SYN-RCVD state receiving ACK
+        print("Received ACK")
         if self.state == 'SYN-RCVD' and packet.ack:
-            print("Received ACK")
             self.state = 'OPEN'
 
     def handle_data_packet(self, packet):
